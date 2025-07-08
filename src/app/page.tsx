@@ -5,11 +5,29 @@ import ThreadView from "@/components/ThreadView";
 import Navbar from '@/components/Navbar';
 import { supabase } from "@/lib/supabaseClient";
 import AuthForm from "@/components/AuthForm";
+import Image from 'next/image';
+
+interface UserType {
+  id: string;
+  email?: string;
+  user_metadata?: { name?: string; full_name?: string };
+  // ...add other fields as needed
+}
+
+// Thread type from ConversationList
+interface Thread {
+  id: string;
+  from_number: string;
+  to_number: string;
+  status_role: string;
+  created_at: string;
+  update_at: string;
+}
 
 export default function Home() {
-  const [selectedThread, setSelectedThread] = useState<any>(null);
+  const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserType | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,14 +55,14 @@ export default function Home() {
   if (!user) return <AuthForm />;
 
   // Close sidebar on mobile when a conversation is selected
-  function handleSelectThread(thread: any) {
+  function handleSelectThread(thread: Thread) {
     setSelectedThread(thread);
     setSidebarOpen(false);
   }
 
   return (
     <>
-      <Navbar user={user} role={role} selectedThread={selectedThread} toggleSidebar={() => setSidebarOpen(v => !v)} isSidebarOpen={isSidebarOpen} />
+      <Navbar user={user} role={role} selectedThread={selectedThread} toggleSidebar={() => setSidebarOpen(v => !v)} />
       <div className="flex h-screen">
         <ConversationList
           onSelect={handleSelectThread}
@@ -59,6 +77,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      <Image src="/chat-logo.png" alt="Logo" width={40} height={40} />
     </>
   );
 }

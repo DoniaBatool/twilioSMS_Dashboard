@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import AuthForm from "@/components/AuthForm";
+import Image from 'next/image';
 
 // Placeholder for user role check (replace with real auth/session logic)
 const isAdmin = true; // TODO: Replace with actual admin check
@@ -15,12 +16,28 @@ function getInitials(nameOrEmail: string) {
     .toUpperCase();
 }
 
+interface UserType {
+  id: string;
+  email?: string;
+  user_metadata?: { name?: string; full_name?: string };
+}
+
+interface AdminUser {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  created_at?: string;
+  last_sign_in_at?: string;
+}
+
 export default function AdminPanel() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   // User dropdown state
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserType | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
@@ -106,7 +123,7 @@ export default function AdminPanel() {
       <nav className="w-full bg-white dark:bg-gray-800 border-b border-blue-100 dark:border-gray-700 shadow-sm flex items-center justify-between px-6 py-3 sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <div className="rounded-full w-10 h-10 flex items-center justify-center shadow overflow-hidden bg-white dark:bg-gray-700">
-            <img src="/chat-logo.png" alt="twilioSMS Dashboard Logo" className="w-10 h-10 object-cover" />
+            <Image src="/chat-logo.png" alt="twilioSMS Dashboard Logo" width={40} height={40} className="w-10 h-10 object-cover" />
           </div>
           <span className="text-2xl font-bold tracking-tight">
             <span className="text-blue-700 dark:text-blue-100">twilio</span>
@@ -124,7 +141,7 @@ export default function AdminPanel() {
               onClick={() => setDropdownOpen((v) => !v)}
             >
               <div className="bg-blue-100 dark:bg-gray-600 text-blue-700 dark:text-blue-100 rounded-full w-9 h-9 flex items-center justify-center font-semibold text-base">
-                {getInitials(user.user_metadata?.name || user.user_metadata?.full_name || user.email)}
+                {getInitials(user.user_metadata?.name || user.user_metadata?.full_name || user.email || "")}
               </div>
               <span className="hidden sm:block text-blue-700 font-medium">
                 {user.user_metadata?.name || user.user_metadata?.full_name || user.email}
@@ -184,7 +201,7 @@ export default function AdminPanel() {
               {filteredUsers.map(user => (
                 <tr key={user.id} className="border-t border-green-200 dark:border-green-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition">
                   <td className="py-2 flex items-center gap-2">
-                    <img src="/green-avatar.png" alt="avatar" className="w-8 h-8 rounded-full shadow object-cover" />
+                    <Image src="/green-avatar.png" alt="avatar" width={32} height={32} className="w-8 h-8 rounded-full shadow object-cover" />
                     <span className="font-semibold text-green-700 dark:text-green-400">{user.email}</span>
                   </td>
                   <td className="py-2 text-blue-700 dark:text-blue-100">{user.first_name} {user.last_name}</td>

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import toast from "react-hot-toast";
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Message {
   id: number;
@@ -23,7 +24,7 @@ export default function ThreadView({ threadId }: { threadId: string }) {
   const [messages, setMessages] = useState<FormattedMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const subscriptionRef = useRef<any>(null);
+  const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [fromNumber, setFromNumber] = useState<string | null>(null);
@@ -150,7 +151,7 @@ export default function ThreadView({ threadId }: { threadId: string }) {
       if (error) throw error;
       setThreadStatus(newStatus);
       toast.success("Thread status updated!");
-    } catch (err) {
+    } catch {
       toast.error("Failed to update status");
     } finally {
       setStatusLoading(false);
@@ -193,7 +194,6 @@ export default function ThreadView({ threadId }: { threadId: string }) {
         {messages.map((msg) => {
           const isLead = msg.sender_type?.toLowerCase() === "lead";
           const isAI = msg.sender_type?.toLowerCase() === "ai";
-          const isManual = msg.sender_type?.toLowerCase().includes("agent");
           return (
             <div key={msg.id} className="flex w-full gap-2 items-end">
               {/* Avatar on left for lead, right for agent/AI */}

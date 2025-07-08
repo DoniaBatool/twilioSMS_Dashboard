@@ -2,6 +2,36 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import toast from 'react-hot-toast';
+import Image from 'next/image';
+
+interface UserType {
+  id: string;
+  email?: string;
+  user_metadata?: { name?: string; full_name?: string };
+}
+
+interface Thread {
+  id: string;
+  from_number: string;
+  to_number: string;
+  status_role: string;
+  created_at: string;
+  update_at: string;
+}
+
+interface Message {
+  id: string;
+  thread_id: string;
+  from_number: string;
+  to_number: string;
+  lead_user_message?: string;
+  AI_Agent_Reply?: string;
+  Manual_Agent_Reply?: string;
+  sender_type?: string;
+  status_role?: string;
+  delivery_status?: string;
+  event_time?: string;
+}
 
 function getInitials(nameOrEmail: string) {
   if (!nameOrEmail) return "?";
@@ -38,9 +68,9 @@ function ExportFormatModal({ open, onClose, onSelect }: { open: boolean, onClose
   );
 }
 
-function polishMessagesForCSV(messages: any[]) {
+function polishMessagesForCSV(messages: Message[]) {
   // Only include key fields with friendly headers
-  return messages.map(msg => ({
+  return messages.map((msg) => ({
     ID: msg.id,
     'Thread ID': msg.thread_id,
     From: msg.from_number,
@@ -55,7 +85,7 @@ function polishMessagesForCSV(messages: any[]) {
   }));
 }
 
-function toCSV(rows: any[]): string {
+function toCSV(rows: Record<string, unknown>[]): string {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
   const csv = [headers.join(',')].concat(
@@ -64,7 +94,12 @@ function toCSV(rows: any[]): string {
   return csv.join('\r\n');
 }
 
-export default function Navbar({ user, role, selectedThread, toggleSidebar, isSidebarOpen }: { user?: any, role?: string | null, selectedThread?: any, toggleSidebar?: () => void, isSidebarOpen?: boolean }) {
+export default function Navbar({ user, role, selectedThread, toggleSidebar }: {
+  user?: UserType;
+  role?: string | null;
+  selectedThread?: Thread | null;
+  toggleSidebar?: () => void;
+}) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [modalOpen, setModalOpen] = useState<null | 'all' | 'current'>(null);
@@ -79,10 +114,10 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar, isSi
   const initials = getInitials(
     user?.user_metadata?.name ||
     user?.user_metadata?.full_name ||
-    user?.email
+    user?.email || ""
   );
 
-  async function fetchAllMessages() {
+  async function fetchAllMessages(): Promise<unknown[]> {
     // Fetch all messages for all threads
     const { data: messages, error } = await supabase
       .from('sms_logs')
@@ -91,7 +126,7 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar, isSi
     return messages;
   }
 
-  async function fetchCurrentThreadMessages() {
+  async function fetchCurrentThreadMessages(): Promise<unknown[]> {
     if (!selectedThread) return [];
     const { data: messages, error } = await supabase
       .from('sms_logs')
@@ -104,14 +139,14 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar, isSi
   async function handleExport(format: 'csv' | 'json', scope: 'all' | 'current') {
     setExporting(true);
     try {
-      let messages: any[] = [];
+      let messages: unknown[] = [];
       if (scope === 'all') {
         messages = await fetchAllMessages();
       } else {
         messages = await fetchCurrentThreadMessages();
       }
       if (format === 'csv') {
-        const polished = polishMessagesForCSV(messages);
+        const polished = polishMessagesForCSV(messages as Message[]);
         const csv = toCSV(polished);
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
@@ -136,8 +171,12 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar, isSi
         URL.revokeObjectURL(url);
         toast.success('Exported as JSON!');
       }
-    } catch (err: any) {
-      alert(err.message || 'Export failed');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message || 'Export failed');
+      } else {
+        alert('Export failed');
+      }
     }
     setExporting(false);
     setModalOpen(null);
@@ -165,7 +204,7 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar, isSi
         )}
         <div className="rounded-full w-10 h-10 flex items-center justify-center shadow overflow-hidden bg-white dark:bg-gray-700">
           {/* Use provided chat bubble logo */}
-          <img src="/chat-logo.png" alt="twilioSMS Dashboard Logo" className="w-10 h-10 object-cover" />
+          <Image src="/chat-logo.png" alt="twilioSMS Dashboard Logo" width={40} height={40} className="w-10 h-10 object-cover" />
         </div>
         <span className="text-xl font-bold tracking-tight">
           <span className="text-blue-700 dark:text-blue-100">twilio</span>

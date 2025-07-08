@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Image from 'next/image';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Thread {
   id: string;
@@ -26,7 +28,7 @@ export default function ConversationList({ onSelect, isSidebarOpen, toggleSideba
   const [phoneSearch, setPhoneSearch] = useState<string>("");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
-  const subscriptionRef = useRef<any>(null);
+  const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
     async function fetchThreadsAndMessages() {
@@ -108,12 +110,6 @@ export default function ConversationList({ onSelect, isSidebarOpen, toggleSideba
       }
     };
   }, [statusFilter, phoneSearch, fromDate, toDate]);
-
-  function getAvatarInitials(from_number: string) {
-    // Use the first letter (ignoring + if present)
-    const num = from_number?.replace('+', '').trim();
-    return num ? num[0].toUpperCase() : '?';
-  }
 
   return (
     <div
@@ -208,9 +204,11 @@ export default function ConversationList({ onSelect, isSidebarOpen, toggleSideba
             onClick={() => onSelect?.(thread)}
           >
             {/* Avatar */}
-            <img
+            <Image
               src="/blue-avatar.png"
               alt="Avatar"
+              width={36}
+              height={36}
               className="flex-shrink-0 w-9 h-9 rounded-full shadow object-cover"
             />
             <div className="flex-1 min-w-0">

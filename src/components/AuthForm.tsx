@@ -2,18 +2,27 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+interface UserType {
+  id: string;
+  email?: string;
+  user_metadata?: { name?: string; full_name?: string; first_name?: string; last_name?: string };
+  created_at?: string;
+  last_sign_in_at?: string;
+  // ...add other fields as needed
+}
+
 export default function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign-in" | "sign-up">("sign-in");
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserType | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
   // Helper function to upsert user in my_users
-  async function upsertMyUsers(user: any) {
+  async function upsertMyUsers(user: UserType | null) {
     if (!user) return;
     await supabase.from('my_users').upsert({
       id: user.id,
