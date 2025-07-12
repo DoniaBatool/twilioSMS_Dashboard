@@ -259,7 +259,7 @@ export default function ThreadView({ threadId }: { threadId: string }) {
         if (e.target.checked) {
           try {
             console.log("Triggering webhook...");
-            const res = await fetch('https://8ed490c05e02.ngrok-free.app/webhook/b669dbdc-69e2-43ef-b580-af004a1b55a2', {
+            const res = await fetch('https://4e6cae3a0c05.ngrok-free.app/webhook/b669dbdc-69e2-43ef-b580-af004a1b55a2', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
