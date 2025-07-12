@@ -13,11 +13,17 @@ interface Message {
   AI_Agent_Reply: string | null;
   Manual_Agent_Reply: string | null;
   sender_type: string | null;
-  event_time: string;
+  created_at: string;
+  timeout_message?: string | null;
+  ai_response_error?: string | null;
+  agent_name?: string | null;
 }
 
 interface FormattedMessage extends Message {
   formattedTime: string;
+  timeout_message?: string | null;
+  ai_response_error?: string | null;
+  agent_name?: string | null;
 }
 
 export default function ThreadView({ threadId }: { threadId: string }) {
@@ -31,6 +37,8 @@ export default function ThreadView({ threadId }: { threadId: string }) {
   const [toNumber, setToNumber] = useState<string | null>(null);
   const [threadStatus, setThreadStatus] = useState<string>("");
   const [statusLoading, setStatusLoading] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiToggleLoading, setAiToggleLoading] = useState(false);
 
   useEffect(() => {
     async function fetchMessages() {
@@ -38,15 +46,15 @@ export default function ThreadView({ threadId }: { threadId: string }) {
       setError(null);
       const { data, error } = await supabase
         .from("sms_logs")
-        .select("id, thread_id, from_number, to_number, lead_user_message, \"AI_Agent_Reply\", \"Manual_Agent_Reply\", sender_type, event_time")
+        .select("id, thread_id, from_number, to_number, lead_user_message, error_user_msg, timeout_message, ai_response_error, \"AI_Agent_Reply\", \"Manual_Agent_Reply\", sender_type, created_at, agent_name")
         .eq("thread_id", threadId)
-        .order("event_time", { ascending: true });
+        .order("created_at", { ascending: true });
       if (error) setError(error.message);
       else {
         // Format dates on the client only
         const formatted = (data || []).map((msg) => ({
           ...msg,
-          formattedTime: typeof window !== 'undefined' && msg.event_time ? new Date(msg.event_time).toLocaleString() : "",
+          formattedTime: typeof window !== 'undefined' && msg.created_at ? new Date(msg.created_at).toLocaleString() : "",
         }));
         setMessages(formatted);
       }
@@ -94,13 +102,48 @@ export default function ThreadView({ threadId }: { threadId: string }) {
     fetchThreadInfo();
   }, [threadId]);
 
+  // Fetch AI enabled status for current user
+  useEffect(() => {
+    async function fetchAiStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from("my_users")
+          .select("ai_enabled")
+          .eq("id", user.id)
+          .single();
+        if (!error && data) {
+          setAiEnabled(data.ai_enabled || false);
+        }
+      }
+    }
+    fetchAiStatus();
+  }, [threadId]);
+
   function getMessageContent(msg: FormattedMessage) {
     // Prefer Manual_Agent_Reply > AI_Agent_Reply > lead_user_message
-    return msg.Manual_Agent_Reply || msg.AI_Agent_Reply || msg.lead_user_message || "";
+    if (msg.Manual_Agent_Reply) return msg.Manual_Agent_Reply;
+    if (msg.AI_Agent_Reply) return msg.AI_Agent_Reply;
+    if (!msg.AI_Agent_Reply && (msg.timeout_message || msg.ai_response_error)) {
+      return (
+        <span style={{ color: 'red', whiteSpace: 'pre-line' }}>
+          {msg.timeout_message ? msg.timeout_message + '\n' : ''}
+          {msg.ai_response_error ? msg.ai_response_error : ''}
+        </span>
+      );
+    }
+    return msg.lead_user_message || "";
   }
 
   function getSenderLabel(msg: FormattedMessage) {
-    if (msg.sender_type?.toLowerCase() === "agent" || msg.sender_type?.toLowerCase() === "manual agent") return "Manual Agent";
+    if (
+      msg.sender_type?.toLowerCase() === "agent" ||
+      msg.sender_type?.toLowerCase() === "manual agent"
+    ) {
+      return msg.agent_name
+        ? `Manual Agent (${msg.agent_name})`
+        : "Manual Agent";
+    }
     if (msg.sender_type?.toLowerCase() === "ai") return "AI Agent";
     return "Lead";
   }
@@ -124,15 +167,39 @@ export default function ThreadView({ threadId }: { threadId: string }) {
     if (!newMessage.trim() || !fromNumber || !toNumber) return;
     setSending(true);
     setError(null);
-    // Insert as Manual Agent reply
+
+    // Get current user info
+    const { data: { user } } = await supabase.auth.getUser();
+    const agentName =
+      user?.user_metadata?.name ||
+      user?.user_metadata?.full_name ||
+      user?.email ||
+      "Unknown";
+
+    // Twilio API ko backend route se call karein
+    const response = await fetch('/api/send-sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: toNumber,   // Twilio/agent number
+        to: fromNumber,   // Lead number
+        body: newMessage,
+      }),
+    });
+    const twilioResponse = await response.json();
+
+    // Supabase me insert karein
     const { error } = await supabase.from("sms_logs").insert([
       {
         thread_id: threadId,
         Manual_Agent_Reply: newMessage,
         sender_type: "manual agent",
-        event_time: new Date().toISOString(),
+        created_at: new Date().toISOString(),
         from_number: fromNumber,
         to_number: toNumber,
+        twilio_sid: twilioResponse.sid,
+        delivery_status: "sent", // Set as 'sent' for manual agent replies
+        agent_name: agentName, // <-- Save agent name
       },
     ]);
     if (error) setError(error.message);
@@ -158,6 +225,65 @@ export default function ThreadView({ threadId }: { threadId: string }) {
     }
   }
 
+  async function handleAiToggle(e: React.ChangeEvent<HTMLInputElement>) {
+    setAiEnabled(e.target.checked); // Optimistic update
+    setAiToggleLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        console.log("Updating my_users...");
+        const { error: userError } = await supabase
+          .from("my_users")
+          .update({ ai_enabled: e.target.checked })
+          .eq("id", user.id);
+        if (userError) {
+          console.error("my_users update error:", userError);
+          throw userError;
+        }
+        console.log("my_users updated");
+
+        console.log("Updating threads_table...");
+        const { error: threadError } = await supabase
+          .from("threads_table")
+          .update({ ai_enabled: e.target.checked })
+          .eq("id", threadId);
+        if (threadError) {
+          console.error("threads_table update error:", threadError);
+          throw threadError;
+        }
+        console.log("threads_table updated");
+
+        toast.success(`AI Agent ${e.target.checked ? "enabled" : "disabled"}!`);
+
+        if (e.target.checked) {
+          try {
+            console.log("Triggering webhook...");
+            const res = await fetch('https://8ed490c05e02.ngrok-free.app/webhook/b669dbdc-69e2-43ef-b580-af004a1b55a2', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                thread_id: threadId,
+                user_id: user.id,
+                action: 'enable_ai'
+              })
+            });
+            console.log("Webhook response:", res);
+            toast.success('AI Agent workflow triggered!');
+          } catch (webhookError) {
+            console.error('Webhook error:', webhookError);
+            toast.error('Failed to trigger AI workflow');
+          }
+        }
+      }
+    } catch (error) {
+      setAiEnabled(!e.target.checked); // Revert if error
+      console.error("AI toggle error:", error);
+      toast.error("Failed to update AI Agent status");
+    } finally {
+      setAiToggleLoading(false);
+    }
+  }
+
   return (
     <div className="flex-1 h-screen bg-blue-50 dark:bg-gray-900 flex flex-col">
       <div className="flex items-center justify-between p-4 border-b border-blue-100 dark:border-gray-700 sticky top-0 bg-blue-50 dark:bg-gray-900 z-10">
@@ -177,6 +303,25 @@ export default function ThreadView({ threadId }: { threadId: string }) {
             <option value="failed">Failed (AI failed, needs attention)</option>
           </select>
           {statusLoading && <span className="ml-2 text-xs text-gray-500">Updating…</span>}
+          
+          {/* AI Agent Toggle */}
+          <div className="flex items-center gap-2 ml-4">
+            <span className="font-semibold text-blue-700 dark:text-blue-100 text-sm">AI Agent:</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aiEnabled}
+                onChange={handleAiToggle}
+                disabled={aiToggleLoading}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              <span className="ml-3 text-sm font-medium text-blue-700 dark:text-blue-100">
+                {aiEnabled ? "ON" : "OFF"}
+              </span>
+            </label>
+            {aiToggleLoading && <span className="ml-2 text-xs text-gray-500">Updating…</span>}
+          </div>
         </div>
       </div>
       {loading && (

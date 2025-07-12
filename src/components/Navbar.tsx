@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
@@ -30,7 +30,7 @@ interface Message {
   sender_type?: string;
   status_role?: string;
   delivery_status?: string;
-  event_time?: string;
+  created_at?: string;
 }
 
 function getInitials(nameOrEmail: string) {
@@ -81,7 +81,7 @@ function polishMessagesForCSV(messages: Message[]) {
     'Sender Type': msg.sender_type,
     'Status': msg.status_role,
     'Delivery Status': msg.delivery_status,
-    'Timestamp': msg.event_time,
+    'Timestamp': msg.created_at,
   }));
 }
 
@@ -94,6 +94,13 @@ function toCSV(rows: Record<string, unknown>[]): string {
   return csv.join('\r\n');
 }
 
+function getUserStatus(user: { last_sign_in_at: string; last_logged_out_at: string | null }) {
+  if (!user.last_logged_out_at || new Date(user.last_sign_in_at) > new Date(user.last_logged_out_at)) {
+    return "Active";
+  }
+  return "Inactive";
+}
+
 export default function Navbar({ user, role, selectedThread, toggleSidebar }: {
   user?: UserType;
   role?: string | null;
@@ -103,6 +110,22 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar }: {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [modalOpen, setModalOpen] = useState<null | 'all' | 'current'>(null);
+  const [myUser, setMyUser] = useState<unknown>(null);
+
+  useEffect(() => {
+    async function fetchMyUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from("my_users")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        if (!error) setMyUser(data);
+      }
+    }
+    fetchMyUser();
+  }, []);
 
   // Name: Prefer user_metadata.name/full_name, fallback to email
   const displayName =
@@ -184,6 +207,16 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar }: {
   }
 
   async function handleLogout() {
+    // Get current user id
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    if (userId) {
+      // Update last_logged_out_at
+      await supabase
+        .from('my_users')
+        .update({ last_logged_out_at: new Date().toISOString() })
+        .eq('id', userId);
+    }
     await supabase.auth.signOut();
     window.location.reload();
   }
@@ -234,6 +267,15 @@ export default function Navbar({ user, role, selectedThread, toggleSidebar }: {
             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-blue-100 dark:border-gray-700 rounded-xl shadow-lg py-2 z-50">
               <div className="px-4 py-2 text-blue-700 dark:text-blue-100 font-semibold">{displayName}</div>
               <div className="px-4 py-1 text-xs text-blue-400 dark:text-blue-300">{user?.email}</div>
+              <div className="px-4 py-1 text-xs">
+                Status: {(myUser && typeof myUser === 'object' && myUser !== null && 'last_sign_in_at' in myUser && 'last_logged_out_at' in myUser) ? (
+                  <span className={getUserStatus(myUser as { last_sign_in_at: string; last_logged_out_at: string | null }) === "Active" ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                    {getUserStatus(myUser as { last_sign_in_at: string; last_logged_out_at: string | null })}
+                  </span>
+                ) : (
+                  <span className="text-gray-400">N/A</span>
+                )}
+              </div>
               <hr className="my-1 border-blue-50 dark:border-gray-700" />
               <button
                 className="w-full text-left px-4 py-2 text-blue-600 dark:text-blue-200 hover:bg-blue-50 dark:hover:bg-gray-700 transition"

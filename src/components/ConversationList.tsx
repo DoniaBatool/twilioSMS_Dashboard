@@ -16,7 +16,7 @@ interface Thread {
 interface LatestMessage {
   thread_id: string;
   content: string;
-  event_time: string;
+  created_at: string;
 }
 
 export default function ConversationList({ onSelect, isSidebarOpen, toggleSidebar }: { onSelect?: (thread: Thread) => void, isSidebarOpen?: boolean, toggleSidebar?: () => void }) {
@@ -68,9 +68,9 @@ export default function ConversationList({ onSelect, isSidebarOpen, toggleSideba
           threadsData.map(async (thread: Thread) => {
             const { data: msgData } = await supabase
               .from("sms_logs")
-              .select('id, thread_id, lead_user_message, "AI_Agent_Reply", "Manual_Agent_Reply", event_time')
+              .select('id, thread_id, lead_user_message, "AI_Agent_Reply", "Manual_Agent_Reply", created_at')
               .eq("thread_id", thread.id)
-              .order("event_time", { ascending: false })
+              .order("created_at", { ascending: false })
               .limit(1);
             if (msgData && msgData.length > 0) {
               const msg = msgData[0];
@@ -79,7 +79,7 @@ export default function ConversationList({ onSelect, isSidebarOpen, toggleSideba
               messages[thread.id] = {
                 thread_id: thread.id,
                 content,
-                event_time: msg.event_time,
+                created_at: msg.created_at,
               };
             }
           })
