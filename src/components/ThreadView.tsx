@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import toast from "react-hot-toast";
 import { RealtimeChannel } from '@supabase/supabase-js';
+import TypingDots from "./TypingDots";
 
 interface Message {
   id: number;
@@ -366,6 +367,12 @@ export default function ThreadView({ threadId }: { threadId: string }) {
             </div>
           );
         })}
+        {/* AI/Agent Typing Animation */}
+        {sending && (
+          <div className="flex justify-end">
+            <TypingDots />
+          </div>
+        )}
       </div>
       {/* Message Send Box */}
       <form
